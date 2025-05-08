@@ -23,7 +23,7 @@ ORDER BY total_airports DESC
 MATCH (a)-[r]->(b)
 RETURN COUNT(r) AS total_relaciones
 
-//gephi
+//Gephi
 MATCH (a)
 SET a.latitude = toInteger(a.latitude)
 SET a.longitude = toInteger(a.longitude)
@@ -62,7 +62,7 @@ CALL gds.graph.project(
 )
 
 
-//Aplicación de los algoritmos
+//Aplicación de los algoritmos de degree
 
 //Degree
 CALL gds.degree.write('myGraphUndirected', { writeProperty: 'degree' })
@@ -79,5 +79,56 @@ CALL gds.degree.write('myGraphReverse', { writeProperty: 'out_degree' })
 YIELD centralityDistribution, nodePropertiesWritten
 RETURN centralityDistribution.min AS minimumScore, centralityDistribution.mean AS meanScore, nodePropertiesWritten
 
+//Mejor camino desde Honolulu hasta Bethel
+MATCH(source:Airport{Label:'Honolulu'}), (target:Airport{Label:'Bethel'})
+CALL gds.shortestPath.dijkstra.write('myGraph',
+{
+sourceNode: source,
+targetNode: target, 
+relationshipWeightProperty: 'distance',
+writeRelationshipType:'PATH_Hawaii_to_Alaska',
+writeNodeIds: true,
+writeCosts: true
+})
+YIELD relationshipsWritten
+RETURN relationshipsWritten
 
+//Buscar el camino
+MATCH p=()-[r:PATH_Hawaii_to_Alaska]->() RETURN p
+
+//Regresamos solo los nodos necesarios
+MATCH(n:Airport)
+WHERE id(n) IN [1838,1861,1765]
+RETURN n
+
+//¿Cual es el nodo con mayor degree?
+MATCH(n:Airport)
+RETURN n
+ORDER by n.degree DESC
+LIMIT 1
+
+//Todos los caminos desde el nodo con mayor degree
+MATCH(source:Airport{Label:'Chicago'})
+CALL gds.allShortestPaths.delta.write('myGraph',
+{
+sourceNode: source,
+relationshipWeightProperty: 'distance',
+writeRelationshipType:'PATH_From_Chicago',
+writeNodeIds: true,
+writeCosts: true
+})
+YIELD relationshipsWritten
+RETURN relationshipsWritten
+
+//Mayor distance
+MATCH (a)-[r:PATH_From_Chicago]->(oa) 
+RETURN a.Label, r.totalCost, oa.Label
+ORDER BY r.totalCost DESC
+LIMIT 5
+
+//Menor distance
+MATCH (a)-[r:PATH_From_Chicago]->(oa) 
+RETURN a.Label, r.totalCost, oa.Label
+ORDER BY r.totalCost 
+LIMIT 5
 
