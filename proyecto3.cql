@@ -132,3 +132,21 @@ RETURN a.Label, r.totalCost, oa.Label
 ORDER BY r.totalCost 
 LIMIT 5
 
+//Preguntas
+//14)	Existe un pasajero Borracho con mucho dinero, sale del aeropuerto de Milwaukee 
+//y solamente quiere seguir tomando en los aviones, por lo que compra vuelos aleatorios en los lugares 
+//a donde llega, ¿hasta donde podría llegar después de 3 vuelos y que empiece a pegarle la cruda?
+
+MATCH(a:Airport)
+WHERE a.Label = 'Milwaukee'
+WITH COLLECT(a) as sourceNodes
+CALL gds.randomWalk.stream('myGraph',
+{
+    sourceNodes:sourceNodes,
+    walkLength: 4,
+    walksPerNode:1,
+    randomSeed: 42,
+    concurrency: 1
+})
+YIELD nodeIds, path
+RETURN nodeIds, path
