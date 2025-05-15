@@ -79,6 +79,7 @@ CALL gds.degree.write('myGraphReverse', { writeProperty: 'out_degree' })
 YIELD centralityDistribution, nodePropertiesWritten
 RETURN centralityDistribution.min AS minimumScore, centralityDistribution.mean AS meanScore, nodePropertiesWritten
 
+//Elige un nodo de inicio y un nodo fin y muestra la mejor ruta tomando en cuenta la distancia geodésica.
 //Mejor camino desde Honolulu hasta Bethel
 MATCH(source:Airport{Label:'Honolulu'}), (target:Airport{Label:'Bethel'})
 CALL gds.shortestPath.dijkstra.write('myGraph',
@@ -100,7 +101,8 @@ MATCH p=()-[r:PATH_Hawaii_to_Alaska]->() RETURN p
 MATCH(n:Airport)
 WHERE id(n) IN [1838,1861,1765]
 RETURN n
-
+//Elige el nodo con mayor degree y aplica un algoritmo que descubra un camino 
+//hasta el que puede llegar recorriendo el subgrafo sin importar la dirección.
 //¿Cual es el nodo con mayor degree?
 MATCH(n:Airport)
 RETURN n
@@ -133,7 +135,203 @@ ORDER BY r.totalCost
 LIMIT 5
 
 //Preguntas
-//14)	Existe un pasajero Borracho con mucho dinero, sale del aeropuerto de Milwaukee 
+// 1) ¿Cuántas es la mayor cantidad de escalas que son necesarias para llegar de un aeropuerto a otro (diámetro del grafo)?
+MATCH (a), (b)
+WHERE a.Id <> b.Id
+WITH a, b, shortestPath((a)-[*]-(b)) AS path
+WHERE path IS NOT NULL // Contar solo los nodos con relaciones
+RETURN length(path) AS diametro 
+ORDER BY diametro DESC
+LIMIT 1
+
+// 2) ¿Cuántos aeropuertos se conectan con el de Atlanta, ya se directo o mediante otros aeropuertos?
+MATCH(source:Airport{Label:'Atlanta'})
+CALL gds.allShortestPaths.delta.write('myGraph',
+{
+    sourceNode: source,
+    relationshipWeightProperty: 'distance',
+    writeRelationshipType:
+    'PATH_Atlanta_Directed', 
+    writeNodeIds: true,
+    writeCosts: true
+})
+YIELD relationshipsWritten
+RETURN relationshipsWritten
+
+// 3) ¿Cuál es la ruta más corta entre el aeropuerto de Toronto y el de Sacramento?
+MATCH(source:Airport{Label:'Toronto'})
+CALL gds.allShortestPaths.delta.write('myGraph',
+{
+    sourceNode: source,
+    relationshipWeightProperty: 'distance',
+    writeRelationshipType:
+    'PATH_Toronto_Directed', 
+    writeNodeIds: true,
+    writeCosts: true
+})
+YIELD relationshipsWritten
+RETURN relationshipsWritten
+
+MATCH p=(v:Airport{Label:'Toronto'})-
+[r:PATH_Toronto_Directed]->
+(:Airport{Label:'Sacramento'})
+RETURN p LIMIT 25
+
+MATCH(n:Airport)
+WHERE id(n) IN [125,1901,1878]
+RETURN n
+
+// 4) ¿Cuál es la ruta más corta entre LA y el aeropuerto de Edmonton?
+MATCH(source:Airport{Label:'Los Angeles'})
+CALL gds.allShortestPaths.delta.write('myGraph',
+{
+    sourceNode: source,
+    relationshipWeightProperty: 'distance',
+    writeRelationshipType:
+    'PATH_LA_Directed', 
+    writeNodeIds: true,
+    writeCosts: true
+})
+YIELD relationshipsWritten
+RETURN relationshipsWritten
+
+MATCH p=(v:Airport{Label:'Los Angeles'})-
+[r:PATH_LA_Directed]->
+(:Airport{Label:'Edmonton'})
+RETURN p LIMIT 25
+
+MATCH(n:Airport)
+WHERE id(n) IN [1715,31]
+RETURN n
+
+// 5) ¿Cuál es el top 3 aeropuertos con mayor cantidad de vuelos recibidos?
+MATCH (a:Airport)
+RETURN a.Label as Aeropuerto, a.in_degree AS Entradas
+ORDER BY Entradas DESC
+LIMIT 3
+
+// NeoDash visualization
+MATCH (a:Airport)
+ORDER BY a.in_degree DESC
+RETURN a
+LIMIT 3
+
+// 6) ¿Cuál es el top 3 aeropuertos con mayor cantidad de vuelos enviados? 
+MATCH (a:Airport)
+RETURN a.Label as Aeropuerto, a.out_degree AS Salidas
+ORDER BY Salidas DESC
+LIMIT 3
+
+// NeoDash visualization
+MATCH (a:Airport)
+ORDER BY a.out_degree DESC
+RETURN a
+LIMIT 3
+
+// 7) ¿Cuál es el vuelo directo más corto en todo el grafo?
+MATCH (a:Airport)-[r:TO]->(a2:Airport)
+RETURN a.Label AS Salida, a2.Label AS Entrada, r.distance AS Distancia
+ORDER BY Distancia ASC
+
+// NeoDash visualization
+MATCH (a:Airport)-[r:TO]->(a2:Airport)
+RETURN a, r, a2
+ORDER BY r.distance ASC
+LIMIT 1
+
+// 8) ¿Cuál es el vuelo directo más largo en todo el grafo?
+MATCH (a:Airport)-[r:TO]->(a2:Airport)
+RETURN a.Label AS Salida, a2.Label AS Entrada, r.distance AS Distancia
+ORDER BY Distancia DESC
+
+// NeoDash visualization
+MATCH (a:Airport)-[r:TO]->(a2:Airport)
+RETURN a, r, a2
+ORDER BY r.distance DESC
+LIMIT 1
+
+// 9) ¿Qué aeropuertos fungen un papel critico en el flujo aéreo de Canada?
+CALL gds.pageRank.write(
+    'myGraph', 
+    {
+        writeProperty: 'PageRank', 
+        maxIterations: 20, 
+        dampingFactor: 0.85
+    }
+)
+YIELD nodePropertiesWritten, ranIterations
+
+MATCH(n:Airport)
+WHERE n.country = 'Canada'
+RETURN n.Label as Aeropuerto, n.PageRank as PageRank
+Order By n.PageRank DESC
+
+// NeoDash visualization
+MATCH(n:Airport)
+WHERE n.country = 'Canada'
+RETURN n
+Order By n.PageRank DESC
+LIMIT 5
+
+// 10) ¿Cuál es la menor distancia que se puede recorrer desde el aeropuerto de Miami hasta Quebec?
+MATCH(source:Airport{Label:'Miami'}),
+(target:Airport{Label:'Quebec'})
+CALL gds.shortestPath.dijkstra.write('myGraph',
+{
+    sourceNode: source,
+    targetNode: target,
+    relationshipWeightProperty: 'distance',
+    writeRelationshipType:'PATH_Miami_Quebec', 
+    writeNodeIds: true,
+    writeCosts: true
+})
+YIELD relationshipsWritten
+RETURN relationshipsWritten
+
+MATCH(n:Airport)
+WHERE id(n) IN [1753,1854,65]
+RETURN n
+
+// 11) ¿Cuántos colores serían necesarios al aplicar el algoritmo de k1coloring?
+CALL gds.k1coloring.write('myGraph', {writeProperty: 'Color'})
+YIELD nodeCount, colorCount, ranIterations, didConverge
+
+MATCH (a:Airport)
+SET a.Color = a.Color + 1
+
+// 12) ¿Cuántos aeropuertos existen sin conexiones a otros?
+MATCH (n)
+WHERE NOT EXISTS { MATCH (n)-[]-() }
+RETURN n
+
+// 13) Quiero hacer un recorrido por Estados Unidos, sin embargo, quiero pasar por San Francisco, estoy dispuesto a realizar 5 viajes 
+// ¿Qué ruta puedo seguir?
+MATCH (a:Airport)
+WHERE a.Label IN ['San Francisco'] AND a.country = 'United States'
+WITH COLLECT(a) AS sourceNodes
+CALL gds.randomWalk.stream(
+ 'myGraph',
+ {
+    sourceNodes: sourceNodes,
+    walkLength: 5, 
+    walksPerNode: 1,
+    randomSeed: 42, 
+    concurrency: 1
+ }  
+)
+YIELD nodeIds, path
+RETURN nodeIds, path
+
+// NeoDash visualization
+MATCH (n:Airport)-[r:TO]->(n2:Airport)
+WHERE id(n) IN [1712, 1838, 1829, 1995] AND id(n2) IN [1838, 1829, 1995, 2115]
+RETURN n, r, n2;
+
+// 14) ¿Cuál es la distancia promedio de los vuelos en la red?
+MATCH (:Airport)-[r:TO]->(:Airport)
+RETURN AVG(r.distance) AS DistanciaPromedio
+
+//15)	Existe un pasajero Borracho con mucho dinero, sale del aeropuerto de Milwaukee 
 //y solamente quiere seguir tomando en los aviones, por lo que compra vuelos aleatorios en los lugares 
 //a donde llega, ¿hasta donde podría llegar después de 3 vuelos y que empiece a pegarle la cruda?
 
